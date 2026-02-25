@@ -1,11 +1,13 @@
 import regex as re
+import sys
 
 def tok_espacios(frase):
     return frase.split(" ")
 
 def tokenizar_signos(texto):
     patron = r'\w+|[^\w\s]|\p{So}'
-    tokens = re.findall(patron, texto, flags = re.UNICODE)
+    tokens = re.findall(patron, texto, flags=re.UNICODE)
+    return [t for t in tokens if t != '\u200d']
     
     return tokens
 
@@ -24,6 +26,13 @@ def tokenizar_ngramas(texto, n):
     return ngramas
 
 
-print(tok_espacios('Hola me llamo juanjo.'))
-print(tokenizar_signos("¡Hola me llamo Juanjo. 🤓😊"))
-print(tokenizar_ngramas("Hola me llamo Juanjo. 🤓😊", 5))
+with open("test_sentences.txt", encoding="utf-8") as f:
+    oraciones = [linea.strip() for linea in f if linea.strip()]
+
+print("=== Tokenización por espacios ===")
+for oracion in oraciones:
+    print(f"Input: '{oracion}' -> Tokens: {tok_espacios(oracion)}")
+
+print("\n=== Tokenización por signos ===")
+for oracion in oraciones:
+    print(f"Input: '{oracion}' -> Tokens: {tokenizar_signos(oracion)}")
