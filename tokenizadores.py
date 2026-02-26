@@ -13,17 +13,19 @@ def tokenizar_signos(texto):
 
 def tokenizar_ngramas(texto, n):
     if n < 1:
-        raise ValueError("El valor de n debe ser >= 1")
+        raise ValueError("El valor de n debe ser mayor o igual a 1")
+    
     tokens = texto.split(" ")
     ngramas = []
+    
     for i in range(len(tokens) - n + 1):
-        ventana = tokens[i: i + n]
+        ventana = tokens[i : i + n]
         ngramas.append(" ".join(ventana))
+        
     return ngramas
 
-
-with open("test_sentences.txt", encoding="utf-8") as f:
-    oraciones = [linea.strip() for linea in f if linea.strip()]
+with open("test_sentences.txt", "r", encoding="utf-8") as f:
+    oraciones = [linea.rstrip('\n\r') for linea in f if linea.strip()]
 
 print("=== Tokenización por espacios ===")
 for oracion in oraciones:
@@ -35,4 +37,4 @@ for oracion in oraciones:
     
 print("\n=== Tokenización por n-gramas ===")
 for oracion in oraciones:
-    print(f"Input: '{oracion}' -> Tokens: {tokenizar_ngramas(oracion, 2)}")
+    print(f"Input: '{oracion}' -> Tokens: {tokenizar_ngramas(oracion, 3)}")
