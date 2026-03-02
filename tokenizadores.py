@@ -2,6 +2,7 @@ import regex as re
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LogisticRegression
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
 # ==========================================
 # 1. Tokenización por espacios
@@ -335,6 +336,68 @@ def tokenizar_bpe(texto, reglas_fusion):
     return tokens_finales
 
 # ==========================================
+# REPRESENTACIÓN GRÁFICA DE RESULTADOS
+# ==========================================
+
+def generar_grafica_vocabulario(path_speeches, oraciones_train):
+    # Cargamos los ficheros de prueba
+    try:
+        with open(path_speeches, "r", encoding="utf-8") as f:
+            discursos = [linea.rstrip('\n\r') for linea in f if linea.strip()]
+    except FileNotFoundError:
+        print(f"Error: No se encontró el archivo {path_speeches}")
+        return
+
+    # Entrenamos los modelos
+    print("Entrenando modelos para la comparativa...")
+    
+    # Configuración del clasificador 
+    clasificador, vectorizador = entrenar_clasificador(oraciones_train)
+    
+    # Ponemos el límite para Wordpiece y BPE de 3000 
+    vocab_wp = entrenar_wordpiece(discursos, max_vocab=3000)
+    _, reglas_bpe = entrenar_bpe(discursos, max_vocab=3000)
+
+    metodos = {
+        "Espacios": lambda x: tok_espacios(x),
+        "Signos Puntuación": lambda x: tokenizar_signos(x),
+        "N-gramas (n=2)": lambda x: tokenizar_ngramas(x, 2),
+        "Clasif. Supervisado": lambda x: tokenizar_clasificacion(x, clasificador, vectorizador),
+        "WordPiece (3000)": lambda x: tokenizar_wordpiece(x, vocab_wp),
+        "BPE (3000)": lambda x: tokenizar_bpe(x, reglas_bpe)
+    }
+
+    vocabularios_vistos = {nombre: set() for nombre in metodos}
+    evolucion = {nombre: [] for nombre in metodos}
+    eje_x = []
+
+    # Procesamos las oraciones y almacenamos la evolución
+    print("Procesando oraciones para la gráfica...")
+    for i, oracion in enumerate(discursos):
+        for nombre, func_tok in metodos.items():
+            tokens = func_tok(oracion)
+            vocabularios_vistos[nombre].update(tokens)
+            evolucion[nombre].append(len(vocabularios_vistos[nombre]))
+        
+        eje_x.append(i + 1)
+
+    plt.figure(figsize=(12, 7))
+    for nombre in metodos:
+        plt.plot(eje_x, evolucion[nombre], label=nombre)
+
+    plt.title("Evolución del tamaño del vocabulario por método de tokenización")
+    plt.xlabel("Número de oraciones procesadas")
+    plt.ylabel("Número de tokens únicos (Vocabulario)")
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Guardar y mostramos la gráfica
+    plt.savefig("evolucion_vocabulario.png")
+    print("Gráfica guardada como 'evolucion_vocabulario.png'")
+    plt.show()
+
+
+# ==========================================
 # BLOQUE PRINCIPAL DE EJECUCIÓN
 # ==========================================
 
@@ -418,5 +481,11 @@ if __name__ == "__main__":
         for oracion in oraciones_train:
             tokens_bpe = tokenizar_bpe(oracion, reglas_bpe)
             print(f"Input: '{oracion}' -> Tokens: {tokens_bpe}")
+            
+    print("\nAnálisis de evolución del vocabulario...")
+    
+    generar_grafica_vocabulario("majesty_speeches.txt", oraciones_train)
+    
+    print("\nProceso finalizado. ")
 
 
