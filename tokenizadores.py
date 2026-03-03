@@ -431,13 +431,13 @@ if __name__ == "__main__":
     for oracion in oraciones_train:
         print(f"Input: '{oracion}' -> Tokens: {tokenizar_signos(oracion)}")
         
-    print("\n=== Tokenización por n-gramas (n=3) (Test) ===")
+    print("\n=== Tokenización por n-gramas (n=2) (Test) ===")
     for oracion in oraciones_test:
-        print(f"Input: '{oracion}' -> Tokens: {tokenizar_ngramas(oracion, 3)}")
+        print(f"Input: '{oracion}' -> Tokens: {tokenizar_ngramas(oracion, 2)}")
 
-    print("\n=== Tokenización por n-gramas (n=3) (Train) ===")
+    print("\n=== Tokenización por n-gramas (n=2) (Train) ===")
     for oracion in oraciones_train:
-        print(f"Input: '{oracion}' -> Tokens: {tokenizar_ngramas(oracion, 3)}")
+        print(f"Input: '{oracion}' -> Tokens: {tokenizar_ngramas(oracion, 2)}")
 
     print("\n=== Tokenización por Clasificación Supervisada (Test)===")
     for oracion in oraciones_test:
