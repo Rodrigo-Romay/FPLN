@@ -50,6 +50,42 @@ def submuestreo(secuencia, t=1e-3):
     return secuencia_filtrada
 
 
+def sugerir_palabras_prueba(tokenizer, n=10, excluir_frecuentes=100):
+    """
+    Sugiere palabras de prueba interesantes evitando stopwords.
+    """
+    stopwords = {
+        'the', 'and', 'was','time', 'looked', 'eyes', 'had', 'his', 'her', 'that', 'with', 'for',
+        'but', 'not', 'are', 'him', 'she', 'they', 'this', 'have', 'from',
+        'all', 'were', 'been', 'when', 'what', 'there', 'said', 'into',
+        'could', 'would', 'which', 'more', 'very', 'just', 'like', 'some',
+        'then', 'than', 'them', 'will', 'one', 'out', 'who', 'also', 'back',
+        'after', 'two', 'how', 'our', 'work', 'first', 'well', 'even', 'want',
+        'because', 'any', 'these', 'give', 'most', 'cant', 'didnt', 'dont',
+        'youre', 'hed', 'shed', 'theyd', 'wasnt', 'hasnt', 'isnt', 'couldnt',
+        'over', 'down', 'only', 'its', 'their', 'your', 'about', 'know',
+        'come', 'think', 'look', 'still', 'here', 'where', 'much', 'same',
+        'each', 'those', 'must', 'way', 'get', 'make', 'going', 'little',
+        'again', 'through', 'never', 'now', 'right', 'while', 'before',
+        'around', 'always', 'thing', 'things', 'nothing', 'something', 'ever'
+    }
+
+    palabras_ordenadas = sorted(tokenizer.word_index.items(), key=lambda x: x[1])
+
+    # Saltamos las más frecuentes y filtramos stopwords
+    candidatas = palabras_ordenadas[excluir_frecuentes:]
+
+    seleccionadas = [
+        p for p, _ in candidatas
+        if len(p) >= 4              # mínimo 4 letras
+        and p not in stopwords      # no es stopword
+        and not p.isdigit()         # no es número
+        and "'" not in p            # no es contracción
+    ][:n]
+
+    return seleccionadas
+    
+
 def generar_pares(secuencia_submuestreada, vocab_size, window_size=6, negative_samples=4.0):
     pairs, labels = skipgrams(
         secuencia_submuestreada,
@@ -66,6 +102,40 @@ def generar_pares(secuencia_submuestreada, vocab_size, window_size=6, negative_s
 
     print(f"Parejas generadas tras submuestreo: {len(pairs)}")
     return word_target, word_context, labels
+
+def obtener_embeddings_iniciales(vocab_size, embedding_dim=100):
+    """Construye el modelo y extrae los pesos ANTES de entrenar"""
+    modelo_temp = construir_modelo(vocab_size, embedding_dim)
+    pesos_iniciales = modelo_temp.get_layer('capa_embedding').get_weights()[0]
+    return pesos_iniciales
+
+
+def graficar_metricas(historial):
+    """Genera gráfica de loss y accuracy por época"""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Loss
+    ax1.plot(historial.history['loss'],     label='Train Loss',     marker='o', color='steelblue')
+    ax1.plot(historial.history['val_loss'], label='Val Loss',       marker='o', color='tomato')
+    ax1.set_title('Pérdida por época')
+    ax1.set_xlabel('Época')
+    ax1.set_ylabel('Loss')
+    ax1.legend()
+    ax1.grid(True, linestyle='--', alpha=0.6)
+
+    # Accuracy
+    ax2.plot(historial.history['accuracy'],     label='Train Accuracy', marker='o', color='steelblue')
+    ax2.plot(historial.history['val_accuracy'], label='Val Accuracy',   marker='o', color='tomato')
+    ax2.set_title('Accuracy por época')
+    ax2.set_xlabel('Época')
+    ax2.set_ylabel('Accuracy')
+    ax2.legend()
+    ax2.grid(True, linestyle='--', alpha=0.6)
+
+    plt.tight_layout()
+    plt.savefig('metricas_entrenamiento.png')
+    print("Gráfica de métricas guardada como: metricas_entrenamiento.png")
+    plt.show()
 
 
 def construir_modelo(vocab_size, embedding_dim=100):
@@ -84,7 +154,7 @@ def construir_modelo(vocab_size, embedding_dim=100):
 
     modelo = Model(inputs=[input_target, input_context], outputs=output)
     modelo.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
-    modelo.summary()
+    
 
     return modelo
 
@@ -196,9 +266,14 @@ def cargar_palabras_objetivo(ruta_target):
 
 
 if __name__ == "__main__":
-    # Rutas
-    ruta_archivo = os.path.join('datasets', 'game_of_thrones.txt')
-    ruta_target  = os.path.join('mats', 'target_words_game_of_thrones.txt')
+    import random
+    import tensorflow as tf
+    random.seed(42)
+    np.random.seed(42)
+    tf.random.set_seed(42)
+
+    ruta_archivo = os.path.join('datasets', 'harry_potter_and_the_philosophers_stone.txt')
+    ruta_target  = os.path.join('mats', 'target_words_harry_potter.txt')
 
     # Pipeline
     tokenizer, secuencia_ids, vocab_size = cargar_y_tokenizar(ruta_archivo)
@@ -209,15 +284,52 @@ if __name__ == "__main__":
     print(f"Palabras tras el filtro: {len(secuencia_submuestreada)}")
 
     word_target, word_context, labels = generar_pares(secuencia_submuestreada, vocab_size)
+    
+    # --- Ejemplo ilustrativo del algoritmo (primeros 5 pares) ---
+    print("\n--- Ejemplo de funcionamiento del algoritmo Skip-gram ---")
+    print(f"{'Par (central, contexto)':<35} {'Etiqueta':>10}  {'Tipo':>10}")
+    print("-" * 60)
+    index_word = {id: palabra for palabra, id in tokenizer.word_index.items()}
+    for i in range(15):
+        w_target  = index_word.get(word_target[i],  f"ID:{word_target[i]}")
+        w_context = index_word.get(word_context[i], f"ID:{word_context[i]}")
+        tipo      = "POSITIVO" if labels[i] == 1 else "NEGATIVO"
+        print(f"  ({w_target:<15}, {w_context:<15})  {labels[i]:>8}    {tipo:>10}")
+    print(f"\nTotal de pares: {len(labels)} "
+          f"| Positivos: {labels.sum()} "
+          f"| Negativos: {(labels==0).sum()}")
 
+    # Cargar palabras objetivo antes de entrenar
+    palabras_objetivo = cargar_palabras_objetivo(ruta_target)
+
+    # --- t-SNE ANTES del entrenamiento ---
+    print("\nGenerando t-SNE con embeddings aleatorios (antes del entrenamiento)...")
+    pesos_iniciales = obtener_embeddings_iniciales(vocab_size, embedding_dim=100)
+    if palabras_objetivo:
+        visualize_tsne_embeddings(
+            palabras_objetivo, pesos_iniciales,
+            tokenizer.word_index,
+            filename="tsne_antes_entrenamiento.png"
+        )
+
+    # --- Entrenamiento ---
     modelo = construir_modelo(vocab_size, embedding_dim=100)
-
     historial, pesos_embeddings = entrenar_modelo(modelo, word_target, word_context, labels)
 
-    evaluar_similitudes(pesos_embeddings, tokenizer, palabras_prueba=["betray", "ambitious", "sword", "wall"])
+    # --- Gráfica de métricas ---
+    graficar_metricas(historial)
 
-    comprobar_embeddings(pesos_embeddings)
-
-    palabras_objetivo = cargar_palabras_objetivo(ruta_target)
+    # --- t-SNE DESPUÉS del entrenamiento ---
     if palabras_objetivo:
-        visualize_tsne_embeddings(palabras_objetivo, pesos_embeddings, tokenizer.word_index, filename="tsne_skipgram.png")
+        visualize_tsne_embeddings(
+            palabras_objetivo, pesos_embeddings,
+            tokenizer.word_index,
+            filename="tsne_skipgram.png"
+        )
+
+    # Palabras automáticas del corpus
+    palabras_auto = sugerir_palabras_prueba(tokenizer, n=10, excluir_frecuentes=50)
+    print(f"Palabras de prueba seleccionadas: {palabras_auto}")
+    evaluar_similitudes(pesos_embeddings, tokenizer, palabras_prueba=palabras_auto)
+    
+    comprobar_embeddings(pesos_embeddings)
