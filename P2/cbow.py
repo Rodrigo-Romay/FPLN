@@ -84,6 +84,34 @@ def visualize_all_tsne_embeddings(embeddings, word_index, words_to_plot, words_t
     plt.close()
     print(f"Gráfico guardado: {filename}")
 
+def plot_history(history, model_name="Modelo"):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(f'Métricas de Entrenamiento - {model_name}', fontsize=14, fontweight='bold')
+
+    # Accuracy
+    ax1.plot(history.history['accuracy'], label='Entrenamiento', marker='o', color='tab:blue')
+    ax1.plot(history.history['val_accuracy'], label='Validación', marker='o', color='tab:orange')
+    ax1.set_title('Precisión (Accuracy)')
+    ax1.set_xlabel('Época')
+    ax1.set_ylabel('Accuracy')
+    ax1.legend()
+    ax1.grid(True, linestyle='--', alpha=0.6)
+
+    # Loss
+    ax2.plot(history.history['loss'], label='Entrenamiento', marker='o', color='tab:blue')
+    ax2.plot(history.history['val_loss'], label='Validación', marker='o', color='tab:orange')
+    ax2.set_title('Pérdida (Loss)')
+    ax2.set_xlabel('Época')
+    ax2.set_ylabel('Loss')
+    ax2.legend()
+    ax2.grid(True, linestyle='--', alpha=0.6)
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.88) 
+    
+    filename = f"metrics_{model_name.lower()}.png"
+    plt.savefig(filename)
+    plt.close()
 
 if __name__ == '__main__':
     # Lectura y tokenización
@@ -133,7 +161,8 @@ if __name__ == '__main__':
 
 
     print("\n Entrenamiento del modelo")
-    modelo_cbow.fit(X_cbow, y_cbow, batch_size=128, epochs=5, validation_split=0.1)
+    history = modelo_cbow.fit(X_cbow, y_cbow, batch_size=128, epochs=5, validation_split=0.1)
+    plot_history(history, model_name="CBOW")
 
     # EVALUACIÓN CUANTITATIVA
     print("\n Evaluación Cuantitativa (después del entrenamiento)")
