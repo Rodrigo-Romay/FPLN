@@ -27,7 +27,7 @@ def cargar_y_tokenizar(ruta_archivo):
     print(f"Tamaño del vocabulario: {vocab_size}")
     return tokenizer, secuencia_ids, vocab_size
 
-def submuestreo(secuencia, t=1e-3):
+def submuestreo(secuencia, t=1e-4):
     total_words = len(secuencia)
     conteo = {}
     for word_id in secuencia:
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     secuencia_filtrada = submuestreo(secuencia_ids)
 
     # Generamos pares (1 positivo y 4 negativos por defecto)
-    pares, etiquetas = skipgrams(secuencia_filtrada, vocabulary_size=vocab_size, window_size=2, negative_samples=4, seed= 42)
+    pares, etiquetas = skipgrams(secuencia_filtrada, vocabulary_size=vocab_size, window_size=5, negative_samples=4, seed= 42)
     word_target, word_context = zip(*pares)
     word_target, word_context, etiquetas = np.array(word_target), np.array(word_context), np.array(etiquetas)
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     pesos_clase = {0: 1.0, 1: 4.0} 
     
     history = modelo.fit(x=[word_target, word_context], y=etiquetas, 
-                    batch_size=1024, epochs=5, validation_split=0.1, 
+                    batch_size=1024, epochs=10, validation_split=0.1, 
                     class_weight=pesos_clase)
     
     plot_history(history, model_name="SkipGram")
