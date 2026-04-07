@@ -133,7 +133,7 @@ if __name__ == '__main__':
 
     # Arquitectura del modelo
     print("\n Construyendo Modelo CBOW")
-    embedding_size = 100
+    embedding_size = 64
     context_length = window_size * 2
 
     entrada = Input(shape=(context_length,), name='entrada_contexto')
@@ -161,7 +161,7 @@ if __name__ == '__main__':
 
 
     print("\n Entrenamiento del modelo")
-    history = modelo_cbow.fit(X_cbow, y_cbow, batch_size=128, epochs=5, validation_split=0.1)
+    history = modelo_cbow.fit(X_cbow, y_cbow, batch_size=256, epochs=10, validation_split=0.1)
     plot_history(history, model_name="CBOW")
 
     # EVALUACIÓN CUANTITATIVA
@@ -179,8 +179,7 @@ if __name__ == '__main__':
     print("\n Evaluación Cualitativa")
     index_word = {id: palabra for palabra, id in tokenizer.word_index.items()}
     
-    palabras_prueba = ["betray", "ambitious", "sword", "wall"]
-    for palabra in palabras_prueba:
+    for palabra in palabras_objetivo:
         obtener_palabras_similares(palabra, pesos_despues, tokenizer.word_index, index_word, top_n=10)
 
     try:

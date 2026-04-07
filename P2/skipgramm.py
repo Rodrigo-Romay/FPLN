@@ -43,7 +43,7 @@ def submuestreo(secuencia, t=1e-4):
 
 # Arquitectura del modelo
 
-def construir_modelo(vocab_size, embedding_dim=100):
+def construir_modelo(vocab_size, embedding_dim = 64):
     # Dos entradas independientes
     input_target = Input((1,), name="entrada_palabra_central")
     input_context = Input((1,), name="entrada_palabra_contexto")
@@ -64,6 +64,25 @@ def construir_modelo(vocab_size, embedding_dim=100):
     modelo = Model(inputs=[input_target, input_context], outputs=output)
     modelo.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
     return modelo
+
+def obtener_palabras_similares(palabra_objetivo, matriz_embeddings, word_index, index_word, top_n=10):
+    if palabra_objetivo not in word_index:
+        print(f"La palabra '{palabra_objetivo}' no está en el vocabulario.")
+        return
+    
+    word_id = word_index[palabra_objetivo]
+    word_vector = matriz_embeddings[word_id].reshape(1, -1)
+    
+    # Calcular similitud de coseno contra todos los embeddings
+    similitudes = cosine_similarity(word_vector, matriz_embeddings)[0]
+    
+    # Obtener los índices de los top_n más similares (excluyendo la propia palabra)
+    indices_top = np.argsort(similitudes)[::-1][1:top_n+1]
+    
+    print(f"\nLas {top_n} palabras más similares a '{palabra_objetivo}':")
+    for idx in indices_top:
+        if idx in index_word:
+            print(f" - {index_word[idx]} (Similitud: {similitudes[idx]:.4f})")
 
 # VISUALIZACIÓN
 def visualize_tsne_embeddings(words, embeddings, word_index, titulo, filename):
@@ -142,14 +161,14 @@ if __name__ == "__main__":
     np.random.seed(42)
     tf.random.set_seed(42)
 
-    ruta_archivo = os.path.join('datasets', 'harry_potter_and_the_philosophers_stone.txt')
-    ruta_target  = os.path.join('mats', 'target_words_harry_potter.txt')
+    ruta_archivo = os.path.join('datasets', 'game_of_thrones.txt')
+    ruta_target  = os.path.join('mats', 'target_words_game_of_thrones.txt')
 
     tokenizer, secuencia_ids, vocab_size = cargar_y_tokenizar(ruta_archivo)
     secuencia_filtrada = submuestreo(secuencia_ids)
 
     # Generamos pares (1 positivo y 4 negativos por defecto)
-    pares, etiquetas = skipgrams(secuencia_filtrada, vocabulary_size=vocab_size, window_size=5, negative_samples=4, seed= 42)
+    pares, etiquetas = skipgrams(secuencia_filtrada, vocabulary_size=vocab_size, window_size=2, negative_samples=4, seed= 42)
     word_target, word_context = zip(*pares)
     word_target, word_context, etiquetas = np.array(word_target), np.array(word_context), np.array(etiquetas)
 
@@ -169,7 +188,7 @@ if __name__ == "__main__":
     pesos_clase = {0: 1.0, 1: 4.0} 
     
     history = modelo.fit(x=[word_target, word_context], y=etiquetas, 
-                    batch_size=1024, epochs=10, validation_split=0.1, 
+                    batch_size=1024, epochs=8, validation_split=0.1, 
                     class_weight=pesos_clase)
     
     plot_history(history, model_name="SkipGram")
@@ -191,10 +210,8 @@ if __name__ == "__main__":
                                 palabras_objetivo, "tsne_all_skipgram_despues.png")
 
     # Similitud
-    index_word = {id: p for p, id in tokenizer.word_index.items()}
-    for p in ["harry", "wand", "voldemort"][:3]: # Ejemplos
-        word_id = tokenizer.word_index.get(p)
-        if word_id:
-            sims = cosine_similarity(pesos_despues[word_id].reshape(1,-1), pesos_despues)[0]
-            top = np.argsort(sims)[::-1][1:11]
-            print(f"\nSimilares a '{p}':", [index_word[i] for i in top])
+    print("\nEvaluación Cualitativa: Palabras Similares")
+    index_word = {id: palabra for palabra, id in tokenizer.word_index.items()}
+    
+    for palabra in palabras_objetivo:
+        obtener_palabras_similares(palabra, pesos_despues, tokenizer.word_index, index_word, top_n=10)
