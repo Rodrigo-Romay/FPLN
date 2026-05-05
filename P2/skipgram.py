@@ -27,7 +27,39 @@ def cargar_y_tokenizar(ruta_archivo):
     print(f"Tamaño del vocabulario: {vocab_size}")
     return tokenizer, secuencia_ids, vocab_size
 
-def submuestreo(secuencia, t=1e-4):
+def generar_muestras_skipgram(secuencia, vocab_size, window_size=2, negative_samples=4):
+    target_words = []
+    context_words = []
+    labels = []
+
+    for i, target in enumerate(secuencia):
+        # Definimos los límites de la ventana para la palabra actual
+        inicio = max(0, i - window_size)
+        fin = min(len(secuencia), i + window_size + 1)
+        
+        for j in range(inicio, fin):
+            if i == j: continue  # No emparejar la palabra consigo misma
+            
+            # 1. PAR POSITIVO (Palabra central + Palabra en ventana)
+            target_words.append(target)
+            context_words.append(secuencia[j])
+            labels.append(1)
+            
+            # 2. PARES NEGATIVOS (Muestreo Negativo)
+            for _ in range(negative_samples):
+                # Elegimos una palabra aleatoria del vocabulario
+                negativo = np.random.randint(1, vocab_size)
+                # Evitamos que la palabra negativa sea la propia palabra central
+                while negativo == target:
+                    negativo = np.random.randint(1, vocab_size)
+                
+                target_words.append(target)
+                context_words.append(negativo)
+                labels.append(0)
+
+    return np.array(target_words), np.array(context_words), np.array(labels)
+
+def submuestreo(secuencia, t=1e-5):
     total_words = len(secuencia)
     conteo = {}
     for word_id in secuencia:
@@ -167,10 +199,13 @@ if __name__ == "__main__":
     tokenizer, secuencia_ids, vocab_size = cargar_y_tokenizar(ruta_archivo)
     secuencia_filtrada = submuestreo(secuencia_ids)
 
-    # Generamos pares (1 positivo y 4 negativos por defecto)
-    pares, etiquetas = skipgrams(secuencia_filtrada, vocabulary_size=vocab_size, window_size=2, negative_samples=4, seed= 42)
-    word_target, word_context = zip(*pares)
-    word_target, word_context, etiquetas = np.array(word_target), np.array(word_context), np.array(etiquetas)
+    # Generamos pares (1 positivo y 4 negativos)
+    word_target, word_context, etiquetas = generar_muestras_skipgram(
+        secuencia_filtrada, 
+        vocab_size=vocab_size, 
+        window_size=2, 
+        negative_samples=4
+    )
 
     # Cargamos palabras objetivo
     with open(ruta_target, 'r', encoding='utf-8') as f:
@@ -188,7 +223,7 @@ if __name__ == "__main__":
     pesos_clase = {0: 1.0, 1: 4.0} 
     
     history = modelo.fit(x=[word_target, word_context], y=etiquetas, 
-                    batch_size=1024, epochs=8, validation_split=0.1, 
+                    batch_size=1024, epochs=5, validation_split=0.1, 
                     class_weight=pesos_clase)
     
     plot_history(history, model_name="SkipGram")
