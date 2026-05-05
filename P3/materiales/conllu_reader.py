@@ -1,4 +1,4 @@
-from token import Token 
+from .conllu_token import Token 
 import sys
 
 class ConlluReader():

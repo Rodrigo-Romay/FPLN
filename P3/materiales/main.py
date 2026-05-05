@@ -1,5 +1,5 @@
 
-from conllu_reader import ConlluReader
+from .conllu_reader import ConlluReader
 from algorithm import ArcEager
 
 def read_file(reader, path):
