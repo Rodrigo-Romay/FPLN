@@ -83,33 +83,34 @@ class Sample(object):
     def state_to_feats(self, nbuffer_feats: int = 2, nstack_feats: int = 2):
         words = []
         upos = []
+        lemmas = [] # Nueva lista para lemmas
         
-        # 1. Extraer características del STACK
-        # Vamos desde el elemento más profundo requerido hasta la cima (-1).
-        # Si no hay suficientes elementos en el stack, añadimos '<PAD>'.
+        # 1. Extraer de STACK
         for i in range(nstack_feats, 0, -1):
             if len(self._state.S) >= i:
                 token = self._state.S[-i]
-                words.append(token.form)
+                words.append(token.form.lower()) # Normalizamos a minúsculas
                 upos.append(token.upos)
+                lemmas.append(token.lemma.lower())
             else:
                 words.append("<PAD>")
                 upos.append("<PAD>")
+                lemmas.append("<PAD>")
                 
-        # 2. Extraer características del BUFFER
-        # Vamos desde el frente del buffer (0) hacia la derecha.
-        # Si el buffer se queda vacío, añadimos '<PAD>'.
+        # 2. Extraer de BUFFER
         for i in range(nbuffer_feats):
             if len(self._state.B) > i:
                 token = self._state.B[i]
-                words.append(token.form)
+                words.append(token.form.lower())
                 upos.append(token.upos)
+                lemmas.append(token.lemma.lower())
             else:
                 words.append("<PAD>")
                 upos.append("<PAD>")
+                lemmas.append("<PAD>")
                 
-        # 3. Concatenar y devolver la lista en el orden exacto requerido
-        return words + upos
+        # Devolvemos las 3 listas concatenadas (Total: 12 features)
+        return words + upos + lemmas
     
 
     def __str__(self):
