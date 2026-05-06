@@ -77,7 +77,7 @@ print(f"Total de muestras de desarrollo generadas: {len(dev_samples)}")
 
 # --- ENTRENAMIENTO ---
 print("\n--- INICIANDO EL MODELO NEURONAL ---")
-parser_model = ParserMLP(word_emb_dim=100, hidden_dim=64, epochs=5, batch_size=64)
+parser_model = ParserMLP(word_emb_dim=100, hidden_dim=64, epochs=10, batch_size=64)
 parser_model.train(train_samples, dev_samples)
 
 parser_model.evaluate(dev_samples)
