@@ -81,76 +81,36 @@ class Sample(object):
     
 
     def state_to_feats(self, nbuffer_feats: int = 2, nstack_feats: int = 2):
-        """
-        Extracts features from a given parsing state for use in a transition-based dependency parser.
-
-        This function generates a feature representation from the current state of the parser, 
-        which includes features from both the stack and the buffer. The number of features from 
-        the stack and the buffer can be specified.
-
-        Parameters:
-            nbuffer_feats (int): The number of features to extract from the buffer.
-            nstack_feats (int): The number of features to extract from the stack.
-
-        Returns:
-            list[str]: A list of extracted features. The features include the words and their 
-                    corresponding UPOS (Universal Part-of-Speech) tags from the specified number 
-                    of elements in the stack and buffer. The format of the feature list is as follows:
-                    [Word_stack_n,...,Word_stack_0, Word_buffer_0,...,Word_buffer_m, 
-                        UPOS_stack_n,...,UPOS_stack_0, UPOS_buffer_0,...,UPOS_buffer_m]
-                    where 'n' is nstack_feats and 'm' is nbuffer_feats.
-
-        Examples:
-            Example 1:
-                State: Stack (size=1): (0, ROOT, ROOT_UPOS)
-                    Buffer (size=13): (1, Distribution, NOUN) | ... | (13, ., PUNCT)
-                    Arcs (size=0): []
-
-                Output: ['<PAD>', 'ROOT', 'Distribution', 'of', '<PAD>', 'ROOT_UPOS', 'NOUN', 'ADP']
-
-            Example 2:
-                State: Stack (size=2): (0, ROOT, ROOT_UPOS) | (1, Distribution, NOUN)
-                    Buffer (size=10): (4, license, NOUN) | ... | (13, ., PUNCT)
-                    Arcs (size=2): [(4, 'det', 3), (4, 'case', 2)]
-
-                Output: ['ROOT', 'Distribution', 'license', 'does', 'ROOT_UPOS', 'NOUN', 'NOUN', 'AUX']
-        """
-        state = self._state
-        feats_words = []
-        feats_tags = []
-
-        # 1. Stack (S0, S1) y sus hijos (Rasgos de 2º orden)
-        stack_tokens = state.S[::-1]
-        for i in range(nstack_feats):
-            if i < len(stack_tokens):
-                t = stack_tokens[i]
-                feats_words.append(t.form.lower()) # Normalización
-                feats_tags.append(t.upos)
+        words = []
+        upos = []
+        
+        # 1. Extraer características del STACK
+        # Vamos desde el elemento más profundo requerido hasta la cima (-1).
+        # Si no hay suficientes elementos en el stack, añadimos '<PAD>'.
+        for i in range(nstack_feats, 0, -1):
+            if len(self._state.S) >= i:
+                token = self._state.S[-i]
+                words.append(token.form)
+                upos.append(token.upos)
+            else:
+                words.append("<PAD>")
+                upos.append("<PAD>")
                 
-                # Buscamos hijos para dar contexto estructural[cite: 1]
-                hijos = [arc for arc in state.A if arc[0] == t.id]
-                if hijos:
-                    lc_tag = min(hijos, key=lambda x: x[2])[1] # Hijo más a la izq
-                    rc_tag = max(hijos, key=lambda x: x[2])[1] # Hijo más a la der
-                    feats_tags.extend([lc_tag, rc_tag])
-                else:
-                    feats_tags.extend(["<NONE>", "<NONE>"])
-            else:
-                feats_words.append("<PAD>")
-                feats_tags.extend(["<PAD>", "<PAD>", "<PAD>"])
-
-        # 2. Buffer (B0, B1)[cite: 1]
-        buffer_tokens = state.B
+        # 2. Extraer características del BUFFER
+        # Vamos desde el frente del buffer (0) hacia la derecha.
+        # Si el buffer se queda vacío, añadimos '<PAD>'.
         for i in range(nbuffer_feats):
-            if i < len(buffer_tokens):
-                t = buffer_tokens[i]
-                feats_words.append(t.form.lower())
-                feats_tags.append(t.upos)
+            if len(self._state.B) > i:
+                token = self._state.B[i]
+                words.append(token.form)
+                upos.append(token.upos)
             else:
-                feats_words.append("<PAD>")
-                feats_tags.append("<PAD>")
-
-        return feats_words + feats_tags
+                words.append("<PAD>")
+                upos.append("<PAD>")
+                
+        # 3. Concatenar y devolver la lista en el orden exacto requerido
+        return words + upos
+    
 
     def __str__(self):
         """
@@ -220,138 +180,56 @@ class ArcEager():
         return len(state.B) == 0
 
     def LA_is_valid(self, state: State) -> bool:
-        """
-        Precondiciones LEFT-ARC: 
-        1. La cima del stack no es el ROOT (id 0).
-        2. La cima del stack no tiene ya un padre asignado[cite: 1, 2].
-        """
-        if not state.S or state.S[-1].id == 0:
-            return False
-        
-        # Comprobar si la cima del stack ya es dependiente (hijo) en algún arco
-        for (head, dep, dependent) in state.A:
-            if dependent == state.S[-1].id:
-                return False
-        return True
-
-    def LA_is_correct(self, state: State, gold_arcs: set) -> bool:
-        """
-        Determines if a LEFT-ARC (LA) transition is the correct action for the current parsing state.
-
-        This method checks if applying a LEFT-ARC transition will correctly reflect the dependency
-        structure of the sentence being parsed, based on the current state of the parser.
-
-        Parameters:
-            state (State): The current state of the parser, including the stack and buffer.
-
-        Returns:
-            bool: True if a LEFT-ARC transition is the correct action in the current state, False otherwise.
-        """
-        
-        """Es correcta si en el árbol real el frente del buffer es padre de la cima del stack[cite: 1]."""
+        # Precondición: El stack y el buffer no pueden estar vacíos.
         if not state.S or not state.B:
             return False
-        return (state.B[0].id, state.S[-1].id) in [(arc[0], arc[2]) for arc in gold_arcs]
+        s = state.S[-1] # Cima del stack (i)
+        
+        # 1. La palabra en la cima del stack no puede ser ROOT (id=0)
+        # 2. No se ha creado aún un arco donde la cima del stack sea el nodo hijo
+        has_head = any(dependent == s.id for head, rel, dependent in state.A)
+        return s.id != 0 and not has_head
+
+    def LA_is_correct(self, state: State) -> bool:
+        # Es correcto si en el árbol gold, la cabeza de la cima del stack es el frente del buffer
+        s = state.S[-1]
+        b = state.B[0]
+        return s.head == b.id
     
-    def RA_is_correct(self, state: State, gold_arcs: set) -> bool:
-        """
-        Determines if a RIGHT-ARC (RA) transition is the correct action for the current parsing state.
-
-        This method assesses whether applying a RIGHT-ARC transition aligns with the correct 
-        dependency structure of the sentence, based on the parser's current state.
-
-        Parameters:
-            state (State): The current state of the parser, including the stack and buffer.
-
-        Returns:
-            bool: True if a RIGHT-ARC transition is the correct action in the current state, False otherwise.
-        """
-        
-        """Es correcta si en el árbol real la cima del stack es padre del frente del buffer[cite: 1]."""
-        if not state.S or not state.B:
-            return False
-        return (state.S[-1].id, state.B[0].id) in [(arc[0], arc[2]) for arc in gold_arcs]
+    def RA_is_correct(self, state: State) -> bool:
+        # Es correcto si en el árbol gold, la cabeza del frente del buffer es la cima del stack
+        s = state.S[-1]
+        b = state.B[0]
+        return b.head == s.id
 
     def RA_is_valid(self, state: State) -> bool:
-        """
-        Checks the preconditions in order to apply a right-arc (RA) transition.
-
-        A RIGHT-ARC transition is valid under certain conditions related to the state of the stack
-        and buffer in the parser. This method evaluates these conditions to determine if a RIGHT-ARC
-        can be applied.
-
-        Parameters:
-            state (State): The current parsing state of the parser.
-
-        Returns:
-            bool: True if a RIGHT-ARC transition can be validly applied in the current state, False otherwise.
-        """
-        
-        """Precondición RIGHT-ARC: El frente del buffer no tiene padre asignado."""
-        if not state.B:
-            return False
-        
-        for (head, dep, dependent) in state.A:
-            if dependent == state.B[0].id:
-                return False
-        return True
-
-    def REDUCE_is_correct(self, state: State, gold_arcs: set) -> bool:
-        """
-        Determines if applying a REDUCE transition is the correct action for the current parsing state.
-
-        A REDUCE transition is correct if there is no word in the buffer (state.B) whose head 
-        is the word on the top of the stack (state.S[-1]). This method checks this condition 
-        against the current state of the parser.
-
-        REDUCE can be only correct iff for every word in the buffer, 
-        no word has as head the top word from the stack 
-
-        Parameters:
-            state (State): The current state of the parser, including the stack and buffer.
-
-        Returns:
-            bool: True if a REDUCE transition is the correct action in the current state, False otherwise.
-        """
-        
-        """
-        Es correcta si la cima del stack ya tiene su padre y no tiene hijos pendientes en el buffer[cite: 1].
-        """
+        # Precondición: El stack y el buffer no pueden estar vacíos.
         if not state.S or not state.B:
             return False
+        b = state.B[0] # Frente del buffer (j)
         
-        s_id = state.S[-1].id
-        # Comprobar si algún nodo en el buffer tiene como padre a la cima del stack
-        for (gold_head, gold_dep, gold_dependent) in gold_arcs:
-            if gold_head == s_id:
-                # Si el hijo (gold_dependent) está todavía en el buffer, no podemos reducir
-                if any(b_token.id == gold_dependent for b_token in state.B):
-                    return False
-        return True
+        # No se ha creado aún un arco donde el frente del buffer sea el nodo hijo
+        has_head = any(dependent == b.id for head, rel, dependent in state.A)
+        return not has_head
+
+    def REDUCE_is_correct(self, state: State) -> bool:
+        # REDUCE es correcto si para cada palabra en el buffer, 
+        # NINGUNA tiene como cabeza a la palabra en la cima del stack.
+        # Es decir, ya le hemos asignado todos los hijos que le correspondían.
+        if not state.S or not state.B:
+            return False
+        s = state.S[-1]
+        return not any(token.head == s.id for token in state.B)
 
     def REDUCE_is_valid(self, state: State) -> bool:
-        """
-        Determines if a REDUCE transition is valid for the current parsing state.
-
-        This method checks if the preconditions for applying a REDUCE transition are met in 
-        the current state of the parser. This typically involves assessing the state of the 
-        stack and buffer.
-
-        Parameters:
-            state (State): The current state of the parser, including the stack and buffer.
-
-        Returns:
-            bool: True if a REDUCE transition is valid in the current state, False otherwise.
-        """
-        
-        """Precondición REDUCE: La cima del stack ya tiene un padre asignado[cite: 1, 2]."""
+        # Precondición: El stack no puede estar vacío.
         if not state.S:
             return False
+        s = state.S[-1]
         
-        for (head, dep, dependent) in state.A:
-            if dependent == state.S[-1].id:
-                return True
-        return False
+        # Ya se ha creado un arco donde la cima del stack es el nodo hijo
+        has_head = any(dependent == s.id for head, rel, dependent in state.A)
+        return has_head
 
     def oracle(self, sent: list['Token']) -> list['Sample']:
         """
@@ -372,40 +250,45 @@ class ArcEager():
             with the information of the outputs to predict (the transition and optionally the dependency label)
         """
 
-        state = self.create_initial_state(sent)
-        gold = self.gold_arcs(sent)
-        samples = []
+        state = self.create_initial_state(sent) 
 
+        samples = [] #Store here all training samples for sent
+
+        #Applies the transition system until a final configuration state is reached
         while not self.final_state(state):
-            # Obtener etiquetas de dependencia para LA y RA del árbol gold
-            s_id = state.S[-1].id if state.S else -1
-            b_id = state.B[0].id if state.B else -1
             
-            # Buscar etiqueta en gold_arcs
-            la_dep = next((arc[1] for arc in gold if arc[0] == b_id and arc[2] == s_id), None)
-            ra_dep = next((arc[1] for arc in gold if arc[0] == s_id and arc[2] == b_id), None)
-
-            if self.LA_is_valid(state) and self.LA_is_correct(state, gold):
-                trans = Transition(self.LA, la_dep)
-                samples.append(Sample(state, trans))
-                self.apply_transition(state, trans)
-
-            elif self.RA_is_valid(state) and self.RA_is_correct(state, gold):
-                trans = Transition(self.RA, ra_dep)
-                samples.append(Sample(state, trans))
-                self.apply_transition(state, trans)
-
-            elif self.REDUCE_is_valid(state) and self.REDUCE_is_correct(state, gold):
-                trans = Transition(self.REDUCE)
-                samples.append(Sample(state, trans))
-                self.apply_transition(state, trans)
+            # Guardamos una copia del estado actual para no alterar el historial
+            current_state = State(list(state.S), list(state.B), set(state.A))
             
+            if self.LA_is_valid(state) and self.LA_is_correct(state):
+                # En LA, la palabra en la cima del stack es la dependiente
+                transition = Transition(self.LA, state.S[-1].dep)
+                samples.append(Sample(current_state, transition))
+                self.apply_transition(state, transition)
+
+            elif self.RA_is_valid(state) and self.RA_is_correct(state):
+                # En RA, la palabra en el frente del buffer es la dependiente
+                transition = Transition(self.RA, state.B[0].dep)
+                samples.append(Sample(current_state, transition))
+                self.apply_transition(state, transition)
+
+            elif self.REDUCE_is_valid(state) and self.REDUCE_is_correct(state):
+                # REDUCE no genera etiquetas de dependencia
+                transition = Transition(self.REDUCE)
+                samples.append(Sample(current_state, transition))
+                self.apply_transition(state, transition)
+                
             else:
-                trans = Transition(self.SHIFT)
-                samples.append(Sample(state, trans))
-                self.apply_transition(state, trans)
+                # If no other transition can be applied, it's a SHIFT transition
+                transition = Transition(self.SHIFT)
+                samples.append(Sample(current_state, transition))
+                self.apply_transition(state, transition)
 
-        assert gold == state.A, "Error: Los arcos generados no coinciden con los Gold"[cite: 1]
+
+        #When the oracle ends, the generated arcs must
+        #match exactly the gold arcs, otherwise the obtained sequence of transitions is not correct
+        assert self.gold_arcs(sent) == state.A, f"Gold arcs {self.gold_arcs(sent)} and generated arcs {state.A} do not match"
+    
         return samples         
     
 
@@ -426,27 +309,34 @@ class ArcEager():
             None; the state is modified in place.
         """
 
-        """Aplica la transición modificando el estado in-place[cite: 1, 2, 4]."""
+        # Extract the action and dependency label from the transition
         t = transition.action
         dep = transition.dependency
-        s = state.S[-1] if state.S else None
-        b = state.B[0] if state.B else None
 
-        if t == self.LA:
-            state.A.add((b.id, dep, s.id)) # Arco: Buffer -> Stack[cite: 1, 2]
-            state.S.pop() # Eliminar cima del stack[cite: 1, 2]
+        # The top item on the stack and the first item in the buffer
+        s = state.S[-1] if state.S else None  # Top of the stack
+        b = state.B[0] if state.B else None   # First in the buffer
 
-        elif t == self.RA:
-            state.A.add((s.id, dep, b.id)) # Arco: Stack -> Buffer[cite: 1, 2]
-            state.S.append(b) # Mover buffer a stack[cite: 1, 2]
-            state.B.pop(0)
+        if t == self.LA and self.LA_is_valid(state):
+            # LEFT-ARC: Crea arco (b.id -> s.id). Elimina la cima del stack.
+            state.A.add((b.id, dep, s.id))
+            state.S.pop()
 
-        elif t == self.REDUCE:
-            state.S.pop() # Eliminar cima del stack[cite: 1, 2]
-
-        else: # SHIFT
+        elif t == self.RA and self.RA_is_valid(state): 
+            # RIGHT-ARC: Crea arco (s.id -> b.id). Mueve el frente del buffer al stack.
+            state.A.add((s.id, dep, b.id))
             state.S.append(b)
-            state.B.pop(0)
+            del state.B[:1]
+
+        elif t == self.REDUCE and self.REDUCE_is_valid(state): 
+            # REDUCE: Elimina la palabra de la cima del stack.
+            state.S.pop()
+
+        else:
+            # SHIFT transition logic: Already implemented! Use it as a basis to implement the others
+            #This involves moving the top of the buffer to the stack
+            state.S.append(b) 
+            del state.B[:1]
     
 
 

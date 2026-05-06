@@ -3,89 +3,105 @@ from materiales.algorithm import ArcEager
 from materiales.model import ParserMLP
 from materiales.postprocessor import PostProcessor
 
-def cargar_y_preparar_datos(reader):
-    """Carga los ficheros CoNLL-U y filtra oraciones no proyectivas[cite: 1, 7]."""
-    print("--- 1. Cargando y filtrando datos ---")
-    
-    train_trees = reader.read_conllu_file("materiales/en_partut-ud-train_clean.conllu")
-    dev_trees = reader.read_conllu_file("materiales/en_partut-ud-dev_clean.conllu")
-    test_trees = reader.read_conllu_file("materiales/en_partut-ud-test_clean.conllu")
-    
-    # El algoritmo Arc-Eager requiere árboles proyectivos en entrenamiento y desarrollo[cite: 1, 2].
-    train_proj = reader.remove_non_projective_trees(train_trees)
-    dev_proj = reader.remove_non_projective_trees(dev_trees)
-    
-    print(f"Entrenamiento: {len(train_proj)} oraciones proyectivas (de {len(train_trees)}).")
-    print(f"Desarrollo: {len(dev_proj)} oraciones proyectivas (de {len(dev_trees)}).")
-    print(f"Test: {len(test_trees)} oraciones cargadas para inferencia.\n")
-    
-    return train_proj, dev_proj, test_trees
 
-def generar_muestras_oraculo(trees, arc_eager, tipo="entrenamiento"):
-    """Transforma árboles sintácticos en muestras de (estado, transición)[cite: 1, 7]."""
-    print(f"--- 2. Generando muestras de {tipo} (Oracle) ---")
-    samples = []
-    for tree in trees:
-        samples.extend(arc_eager.oracle(tree))
-    print(f"Total de muestras generadas para {tipo}: {len(samples)}.\n")
-    return samples
 
-def entrenar_analizador(train_samples, dev_samples):
-    """Instancia y entrena el modelo MLP con validación por época."""
-    print("--- 3. Entrenamiento del modelo neuronal ---")
-    # Subimos a 30 épocas para mejorar el aprendizaje multitarea[cite: 8, 11].
-    model = ParserMLP(
-        word_emb_dim=100, 
-        hidden_dim=256, 
-        epochs=30, 
-        batch_size=128
-    )
-    
-    # El método train mostrará la pérdida y precisión de validación por cada época[cite: 8, 11].
-    model.train(train_samples, dev_samples)
-    print("Entrenamiento finalizado.\n")
-    return model
+def read_file(reader, path):
+    trees = reader.read_conllu_file(path)
+    print(f"Read a total of {len(trees)} sentences from {path}")
+    print (f"Printing the first sentence of the training set... trees[0] = {trees[0]}")
+    for token in trees[0]:
+        print (token)
+    print ()
+    return trees
 
-def realizar_inferencia_y_postproceso(model, test_trees, reader):
-    """Ejecuta el parser, guarda resultados y aplica correcciones estructurales[cite: 1, 9, 10]."""
-    print("--- 4. Inferencia y Postprocesado ---")
-    
-    # Procesamiento eficiente "en vertical" del conjunto de test[cite: 1].
-    parsed_trees = model.run(test_trees)
-    
-    fichero_raw = "materiales/predicciones_raw.conllu"
-    reader.write_conllu_file(fichero_raw, parsed_trees)
-    
-    print("Aplicando PostProcessor para corregir árboles malformados...")
-    postprocessor = PostProcessor()
-    # Asegura que cada oración tenga una única raíz según el estándar UD[cite: 1, 10].
-    final_trees = postprocessor.postprocess(fichero_raw)
-    
-    fichero_final = "materiales/predicciones_final.conllu"
-    reader.write_conllu_file(fichero_final, final_trees)
-    
-    print(f"Resultados finales guardados en: {fichero_final}\n")
 
-def main():
-    """Función principal que orquestra todo el proceso de la Práctica 3."""
-    reader = ConlluReader()
-    arc_eager = ArcEager()
-    
-    # Paso 1: Datos
-    train_proj, dev_proj, test_trees = cargar_y_preparar_datos(reader)
-    
-    # Paso 2: Muestras (Oracle)
-    train_samples = generar_muestras_oraculo(train_proj, arc_eager, "entrenamiento")
-    dev_samples = generar_muestras_oraculo(dev_proj, arc_eager, "desarrollo")
-    
-    # Paso 3: Modelo
-    model = entrenar_analizador(train_samples, dev_samples)
-    
-    # Paso 4: Inferencia y Postprocesado
-    realizar_inferencia_y_postproceso(model, test_trees, reader)
-    
-    print("--- Proceso completado con éxito ---")
-    print("Siguiente paso: Ejecutar script de evaluación oficial (conll18_ud_eval.py).[cite: 1, 6]")
+"""
+ALREADY IMPLEMENTED
+Read and convert CoNLLU files into tree structures
+"""
+# Initialize the ConlluReader
+reader = ConlluReader()
+train_trees = read_file(reader,path="materiales/en_partut-ud-train_clean.conllu")
+dev_trees = read_file(reader,path="materiales/en_partut-ud-dev_clean.conllu")
+test_trees = read_file(reader,path="materiales/en_partut-ud-test_clean.conllu")
 
-if __name__ == "__main__":
-    main()
+"""
+We remove the non-projective sentences from the training and development set,
+as the Arc-Eager algorithm cannot parse non-projective sentences.
+
+We don't remove them from test set set, because for those we only will do inference
+"""
+train_trees = reader.remove_non_projective_trees(train_trees)
+dev_trees = reader.remove_non_projective_trees(dev_trees)
+
+print ("Total training trees after removing non-projective sentences", len(train_trees))
+print ("Total dev trees after removing non-projective sentences", len(dev_trees))
+
+#Create and instance of the ArcEager
+arc_eager = ArcEager()
+
+print ("\n ------ TODO: Implement the rest of the assignment ------")
+
+# TODO: Complete the ArcEager algorithm class.
+# 1. Implement the 'oracle' function and auxiliary functions to determine the correct parser actions.
+#    Note: The SHIFT action is already implemented as an example.
+#    Additional Note: The 'create_initial_state()', 'final_state()', and 'gold_arcs()' functions are already implemented.
+# 2. Use the 'oracle' function in ArcEager to generate all training samples, creating a dataset for training the neural model.
+# 3. Utilize the same 'oracle' function to generate development samples for model tuning and evaluation.
+
+# TODO: Define and implement the neural model in the 'model.py' module.
+# 1. Train the model on the generated training dataset.
+# 2. Evaluate the model's performance using the development dataset.
+# 3. Conduct inference on the test set with the trained model.
+# 4. Save the parsing results of the test set in CoNLLU format for further analysis.
+
+# TODO: Utilize the 'postprocessor' module (already implemented).
+# 1. Read the output saved in the CoNLLU file and address any issues with ill-formed trees.
+# 2. Specify the file path: path = "<YOUR_PATH_TO_OUTPUT_FILE>"
+# 3. Process the file: trees = postprocessor.postprocess(path)
+# 4. Save the processed trees to a new output file.
+
+print("Generando muestras de entrenamiento...")
+train_samples = []
+for tree in train_trees:
+    train_samples.extend(arc_eager.oracle(tree))
+
+print(f"Total de muestras de entrenamiento generadas: {len(train_samples)}")
+
+print("Generando muestras de desarrollo (validación)...")
+dev_samples = []
+for tree in dev_trees:
+    dev_samples.extend(arc_eager.oracle(tree))
+
+print(f"Total de muestras de desarrollo generadas: {len(dev_samples)}")
+
+# --- ENTRENAMIENTO ---
+print("\n--- INICIANDO EL MODELO NEURONAL ---")
+parser_model = ParserMLP(word_emb_dim=100, hidden_dim=64, epochs=5, batch_size=64)
+parser_model.train(train_samples, dev_samples)
+
+parser_model.evaluate(dev_samples)
+
+print("\n Entrenamiento y evaluación terminados")
+
+# --- INFERENCIA Y POSTPROCESADO ---
+print("\n--- PREDICCIÓN EN CONJUNTO DE TEST ---")
+
+# Predecimos la estructura de las oraciones de test
+parser_model.run(test_trees)
+
+# Guardamos el archivo con las predicciones sin arreglar
+out_path_raw = "test_predictions_raw.conllu"
+reader.write_conllu_file(out_path_raw, test_trees)
+print(f"Predicciones guardadas en {out_path_raw}")
+
+# Postprocesamos para arreglar árboles corruptos
+print("\n--- POSTPROCESAMIENTO ---")
+pp = PostProcessor()
+fixed_trees = pp.postprocess(out_path_raw)
+
+# Guardamos el archivo final y limpio
+out_path_final = "test_predictions_final.conllu"
+reader.write_conllu_file(out_path_final, fixed_trees)
+print(f"Predicciones limpias guardadas en {out_path_final}")
+print("¡Práctica completada con éxito!")
