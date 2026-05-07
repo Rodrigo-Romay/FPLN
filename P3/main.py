@@ -75,6 +75,7 @@ for tree in dev_trees:
 
 print(f"Total de muestras de desarrollo generadas: {len(dev_samples)}")
 
+# --- ENTRENAMIENTO ---
 print("\n--- INICIANDO EL MODELO NEURONAL ---")
 parser_model = ParserMLP(word_emb_dim=100, hidden_dim=200, epochs=20, batch_size=64)
 parser_model.train(train_samples, dev_samples)
@@ -83,22 +84,23 @@ parser_model.evaluate(dev_samples)
 
 print("\n Entrenamiento y evaluación terminados")
 
+# --- INFERENCIA Y POSTPROCESADO ---
 print("\n--- PREDICCIÓN EN CONJUNTO DE TEST ---")
 
 # Predecimos la estructura de las oraciones de test
 parser_model.run(test_trees)
 
-# Guardamos las predicciones sin arreglar
+# Guardamos el archivo con las predicciones sin arreglar
 out_path_raw = "test_predictions_raw.conllu"
 reader.write_conllu_file(out_path_raw, test_trees)
 print(f"Predicciones guardadas en {out_path_raw}")
 
-# Postprocesado para arreglar arrboles corruptos
+# Postprocesamos para arreglar árboles corruptos
 print("\n--- POSTPROCESAMIENTO ---")
 pp = PostProcessor()
 fixed_trees = pp.postprocess(out_path_raw)
 
-# Guardar el archivo
+# Guardamos el archivo final y limpio
 out_path_final = "test_predictions_final.conllu"
 reader.write_conllu_file(out_path_final, fixed_trees)
 print(f"Predicciones limpias guardadas en {out_path_final}")
