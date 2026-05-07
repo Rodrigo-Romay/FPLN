@@ -83,13 +83,15 @@ class Sample(object):
     def state_to_feats(self, nbuffer_feats: int = 2, nstack_feats: int = 2):
         words = []
         upos = []
-        lemmas = [] # Nueva lista para lemmas
+        lemmas = [] 
         
-        # 1. Extraer de STACK
+        # Extraemos del stack
         for i in range(nstack_feats, 0, -1):
             if len(self._state.S) >= i:
                 token = self._state.S[-i]
-                words.append(token.form.lower()) # Normalizamos a minúsculas
+                
+                # Normalizamos a minúsculas
+                words.append(token.form.lower()) 
                 upos.append(token.upos)
                 lemmas.append(token.lemma.lower())
             else:
@@ -97,7 +99,7 @@ class Sample(object):
                 upos.append("<PAD>")
                 lemmas.append("<PAD>")
                 
-        # 2. Extraer de BUFFER
+        # Extraemos del buffer
         for i in range(nbuffer_feats):
             if len(self._state.B) > i:
                 token = self._state.B[i]
@@ -109,7 +111,7 @@ class Sample(object):
                 upos.append("<PAD>")
                 lemmas.append("<PAD>")
                 
-        # Devolvemos las 3 listas concatenadas (Total: 12 features)
+        # 3 listas concatenadas 
         return words + upos + lemmas
     
 
@@ -181,54 +183,54 @@ class ArcEager():
         return len(state.B) == 0
 
     def LA_is_valid(self, state: State) -> bool:
-        # Precondición: El stack y el buffer no pueden estar vacíos.
+        # stack y buffer no vacíos
         if not state.S or not state.B:
             return False
-        s = state.S[-1] # Cima del stack (i)
+        # Cima stack (i)
+        s = state.S[-1] 
         
-        # 1. La palabra en la cima del stack no puede ser ROOT (id=0)
-        # 2. No se ha creado aún un arco donde la cima del stack sea el nodo hijo
+        # cima del stack no ROOT (id=0)
+        # No arcosz donde la cima sea nodo hijo
         has_head = any(dependent == s.id for head, rel, dependent in state.A)
         return s.id != 0 and not has_head
 
     def LA_is_correct(self, state: State) -> bool:
-        # Es correcto si en el árbol gold, la cabeza de la cima del stack es el frente del buffer
+        # si en el gold, la cabeza de la cima es el frente de buffer
         s = state.S[-1]
         b = state.B[0]
         return s.head == b.id
     
     def RA_is_correct(self, state: State) -> bool:
-        # Es correcto si en el árbol gold, la cabeza del frente del buffer es la cima del stack
+        # si en el gold, la cabeza del frente del buffer es la cima de stack
         s = state.S[-1]
         b = state.B[0]
         return b.head == s.id
 
     def RA_is_valid(self, state: State) -> bool:
-        # Precondición: El stack y el buffer no pueden estar vacíos.
+        # stack y buffer no vacios
         if not state.S or not state.B:
             return False
-        b = state.B[0] # Frente del buffer (j)
+        # Frente del buffer (j)
+        b = state.B[0] 
         
-        # No se ha creado aún un arco donde el frente del buffer sea el nodo hijo
+        # No arco donde el frente del buffer es nodo hijo
         has_head = any(dependent == b.id for head, rel, dependent in state.A)
         return not has_head
 
     def REDUCE_is_correct(self, state: State) -> bool:
-        # REDUCE es correcto si para cada palabra en el buffer, 
-        # NINGUNA tiene como cabeza a la palabra en la cima del stack.
-        # Es decir, ya le hemos asignado todos los hijos que le correspondían.
+        # si para cada palabra en el buffer, ya le hemos asignado todos los hijos que le correspondían.
         if not state.S or not state.B:
             return False
         s = state.S[-1]
         return not any(token.head == s.id for token in state.B)
 
     def REDUCE_is_valid(self, state: State) -> bool:
-        # Precondición: El stack no puede estar vacío.
+        # stack no puede estar vacío.
         if not state.S:
             return False
         s = state.S[-1]
         
-        # Ya se ha creado un arco donde la cima del stack es el nodo hijo
+        # Hay arco donde la cima del stack es nodo hijo
         has_head = any(dependent == s.id for head, rel, dependent in state.A)
         return has_head
 
@@ -253,41 +255,36 @@ class ArcEager():
 
         state = self.create_initial_state(sent) 
 
-        samples = [] #Store here all training samples for sent
+        samples = [] 
 
-        #Applies the transition system until a final configuration state is reached
         while not self.final_state(state):
             
-            # Guardamos una copia del estado actual para no alterar el historial
+            # Guardamos una copia 
             current_state = State(list(state.S), list(state.B), set(state.A))
             
             if self.LA_is_valid(state) and self.LA_is_correct(state):
-                # En LA, la palabra en la cima del stack es la dependiente
+                # LA: la palabra en la cima es dependiente
                 transition = Transition(self.LA, state.S[-1].dep)
                 samples.append(Sample(current_state, transition))
                 self.apply_transition(state, transition)
 
             elif self.RA_is_valid(state) and self.RA_is_correct(state):
-                # En RA, la palabra en el frente del buffer es la dependiente
+                # RA: la palabras en el frente de buffer es dependiente
                 transition = Transition(self.RA, state.B[0].dep)
                 samples.append(Sample(current_state, transition))
                 self.apply_transition(state, transition)
 
             elif self.REDUCE_is_valid(state) and self.REDUCE_is_correct(state):
-                # REDUCE no genera etiquetas de dependencia
                 transition = Transition(self.REDUCE)
                 samples.append(Sample(current_state, transition))
                 self.apply_transition(state, transition)
                 
             else:
-                # If no other transition can be applied, it's a SHIFT transition
                 transition = Transition(self.SHIFT)
                 samples.append(Sample(current_state, transition))
                 self.apply_transition(state, transition)
 
 
-        #When the oracle ends, the generated arcs must
-        #match exactly the gold arcs, otherwise the obtained sequence of transitions is not correct
         assert self.gold_arcs(sent) == state.A, f"Gold arcs {self.gold_arcs(sent)} and generated arcs {state.A} do not match"
     
         return samples         
@@ -310,32 +307,27 @@ class ArcEager():
             None; the state is modified in place.
         """
 
-        # Extract the action and dependency label from the transition
         t = transition.action
         dep = transition.dependency
 
-        # The top item on the stack and the first item in the buffer
-        s = state.S[-1] if state.S else None  # Top of the stack
-        b = state.B[0] if state.B else None   # First in the buffer
+        s = state.S[-1] if state.S else None  
+        b = state.B[0] if state.B else None   
 
         if t == self.LA and self.LA_is_valid(state):
-            # LEFT-ARC: Crea arco (b.id -> s.id). Elimina la cima del stack.
-            state.A.add((b.id, dep, s.id))
+            # Crea arco (b.id -> s.id), elimina la cima stack            state.A.add((b.id, dep, s.id))
             state.S.pop()
 
         elif t == self.RA and self.RA_is_valid(state): 
-            # RIGHT-ARC: Crea arco (s.id -> b.id). Mueve el frente del buffer al stack.
+            # Crea arco (s.id -> b.id), mueve el frente del buffer a stack
             state.A.add((s.id, dep, b.id))
             state.S.append(b)
             del state.B[:1]
 
         elif t == self.REDUCE and self.REDUCE_is_valid(state): 
-            # REDUCE: Elimina la palabra de la cima del stack.
+            # wlimina la palabra de la cima del stack
             state.S.pop()
 
         else:
-            # SHIFT transition logic: Already implemented! Use it as a basis to implement the others
-            #This involves moving the top of the buffer to the stack
             state.S.append(b) 
             del state.B[:1]
     
@@ -394,7 +386,6 @@ if __name__ == "__main__":
     state = arc_eager.create_initial_state(tree)
     print(state)
 
-    #Checking that is a final state
     print (f"Is the initial state a valid final state (buffer is empty)? {arc_eager.final_state(state)}\n")
 
     # Applying a SHIFT transition
