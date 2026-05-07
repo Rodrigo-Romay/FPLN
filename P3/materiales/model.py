@@ -45,7 +45,7 @@ class ParserMLP:
 
         self.word_to_id = {"<PAD>": 0, "<UNK>": 1}
         self.upos_to_id = {"<PAD>": 0, "<UNK>": 1}
-        self.lemma_to_id = {"<PAD>": 0, "<UNK>": 1} # Nuevo vocabulario
+        self.lemma_to_id = {"<PAD>": 0, "<UNK>": 1} 
         
         self.action_to_id = {}
         self.deprel_to_id = {}
@@ -60,7 +60,6 @@ class ParserMLP:
         from tensorflow.keras.callbacks import EarlyStopping
         import numpy as np
 
-        # --- 1. CONSTRUIR DICCIONARIOS (Incluyendo Lemmas y .lower()) ---
         print("Construyendo vocabularios...")
         for sample in training_samples:
             feats = sample.state_to_feats()
@@ -86,7 +85,6 @@ class ParserMLP:
                 self.deprel_to_id[dep] = idx
                 self.id_to_deprel[idx] = dep
 
-        # --- 2. PREPARAR DATOS (3 Inputs ahora) ---
         def extract_tensors(samples):
             size = len(samples)
             Xw, Xp, Xl = np.zeros((size, 4)), np.zeros((size, 4)), np.zeros((size, 4))
@@ -104,21 +102,19 @@ class ParserMLP:
         X_train, Y_train = extract_tensors(training_samples)
         X_dev, Y_dev = extract_tensors(dev_samples)
 
-        # --- 3. ARQUITECTURA (hidden_dim=200, Dropout, UPOS=32) ---
         in_w = Input(shape=(4,), name="input_words")
         in_p = Input(shape=(4,), name="input_upos")
         in_l = Input(shape=(4,), name="input_lemmas")
         
         emb_w = Embedding(len(self.word_to_id), self.word_emb_dim)(in_w)
-        emb_p = Embedding(len(self.upos_to_id), 32)(in_p) # Subido a 32
+        emb_p = Embedding(len(self.upos_to_id), 32)(in_p) 
         emb_l = Embedding(len(self.lemma_to_id), 100)(in_l)
         
         flat = Concatenate()([Flatten()(emb_w), Flatten()(emb_p), Flatten()(emb_l)])
         
-        # Dos capas densas con Dropout para frenar el Overfitting
         x = Dense(self.hidden_dim, activation='relu')(flat)
         x = Dropout(0.3)(x)
-        x = Dense(128, activation='relu')(x) # Capa extra
+        x = Dense(128, activation='relu')(x) 
         x = Dropout(0.3)(x)
         
         out_a = Dense(len(self.action_to_id), activation='softmax', name="out_action")(x)
@@ -129,9 +125,6 @@ class ParserMLP:
                            loss='sparse_categorical_crossentropy',
                            metrics={'out_action': 'accuracy', 'out_deprel': 'accuracy'})
 
-        # --- 4. ENTRENAMIENTO CON EARLY STOPPING ---
-        # Usamos val_loss (suma de ambos errores) y paciencia 5
-        # Esto asegura que no pare hasta que AMBAS tareas dejen de mejorar
         es = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
         self.model.fit(X_train, Y_train, validation_data=(X_dev, Y_dev),
@@ -141,35 +134,30 @@ class ParserMLP:
     def evaluate(self, samples: list['Sample']):
         print(f"\nEvaluando el modelo en {len(samples)} muestras...")
         
-        # 1. Preparamos TRES tensores de entrada y los dos de salida
         size = len(samples)
         X_words = np.zeros((size, 4), dtype='int32')
         X_upos = np.zeros((size, 4), dtype='int32')
-        X_lemmas = np.zeros((size, 4), dtype='int32') # <-- NUEVO
+        X_lemmas = np.zeros((size, 4), dtype='int32') 
         
         Y_action = np.zeros((size,), dtype='int32')
         Y_deprel = np.zeros((size,), dtype='int32')
         
         for i, s in enumerate(samples):
             feats = s.state_to_feats()
-            # Mapeo a IDs con .lower() para Words y Lemmas (igual que en train)
             X_words[i] = [self.word_to_id.get(w.lower(), 1) for w in feats[0:4]]
             X_upos[i] = [self.upos_to_id.get(p, 1) for p in feats[4:8]]
-            X_lemmas[i] = [self.lemma_to_id.get(l.lower(), 1) for l in feats[8:12]] # <-- NUEVO
+            X_lemmas[i] = [self.lemma_to_id.get(l.lower(), 1) for l in feats[8:12]] 
             
-            # Etiquetas reales
             Y_action[i] = self.action_to_id.get(s.transition.action, 0)
             dep = s.transition.dependency or "None"
             Y_deprel[i] = self.deprel_to_id.get(dep, self.deprel_to_id["None"])
 
-        # 2. Predicción pasando los TRES tensores
         predictions = self.model.predict([X_words, X_upos, X_lemmas], 
                                          batch_size=self.batch_size, 
                                          verbose=0)
         action_probs = predictions[0]
         deprel_probs = predictions[1]
 
-        # 3. Cálculo de aciertos
         correct_actions = 0
         correct_deprels = 0
 
@@ -189,7 +177,6 @@ class ParserMLP:
         print(f"Accuracy de Dependencia: {deprel_acc:.2f}%")
     
     def run(self, sents: list['Token']):
-        # Importamos las herramientas que vamos a necesitar (¡Ahora con Transition!)
         from .algorithm import ArcEager, State, Sample, Transition
         import numpy as np
 
@@ -198,7 +185,6 @@ class ParserMLP:
         # 1. Initialize: Create the initial state for each sentence.
         batch_states = [arc_eager.create_initial_state(sent) for sent in sents]
         
-        # Necesitamos saber a qué oración pertenece cada estado para actualizarlos
         active_indices = list(range(len(sents)))
 
         # 8. Iterative Process: Repeat steps 2 to 7 until all sentences have reached their final state.
@@ -241,7 +227,6 @@ class ParserMLP:
                 for action_id in sorted_action_ids:
                     action_str = self.id_to_action[action_id]
                     
-                    # Comprobamos la validez según el oráculo (Corregido: usamos Transition directamente)
                     if action_str == arc_eager.LA and arc_eager.LA_is_valid(state):
                         transition = Transition(action_str, best_deprel_str)
                         arc_eager.apply_transition(state, transition)
@@ -264,7 +249,6 @@ class ParserMLP:
                             transition_applied = True
                             break
                             
-                # Mecanismo de seguridad
                 if not transition_applied:
                     if len(state.B) > 0:
                          arc_eager.apply_transition(state, Transition(arc_eager.SHIFT))
@@ -276,13 +260,11 @@ class ParserMLP:
                     new_batch_states.append(state)
                     new_active_indices.append(active_indices[i])
                 else:
-                    # Cuando termina, asignamos los arcos al árbol original
                     sent = sents[active_indices[i]]
                     for head_id, rel, dependent_id in state.A:
                          sent[dependent_id].head = head_id
                          sent[dependent_id].dep = rel
                          
-            # Actualizamos las listas para la siguiente iteración
             batch_states = new_batch_states
             active_indices = new_active_indices
             

@@ -83,13 +83,12 @@ class Sample(object):
     def state_to_feats(self, nbuffer_feats: int = 2, nstack_feats: int = 2):
         words = []
         upos = []
-        lemmas = [] # Nueva lista para lemmas
+        lemmas = [] 
         
-        # 1. Extraer de STACK
         for i in range(nstack_feats, 0, -1):
             if len(self._state.S) >= i:
                 token = self._state.S[-i]
-                words.append(token.form.lower()) # Normalizamos a minúsculas
+                words.append(token.form.lower()) 
                 upos.append(token.upos)
                 lemmas.append(token.lemma.lower())
             else:
@@ -97,7 +96,6 @@ class Sample(object):
                 upos.append("<PAD>")
                 lemmas.append("<PAD>")
                 
-        # 2. Extraer de BUFFER
         for i in range(nbuffer_feats):
             if len(self._state.B) > i:
                 token = self._state.B[i]
@@ -109,7 +107,6 @@ class Sample(object):
                 upos.append("<PAD>")
                 lemmas.append("<PAD>")
                 
-        # Devolvemos las 3 listas concatenadas (Total: 12 features)
         return words + upos + lemmas
     
 
@@ -181,54 +178,42 @@ class ArcEager():
         return len(state.B) == 0
 
     def LA_is_valid(self, state: State) -> bool:
-        # Precondición: El stack y el buffer no pueden estar vacíos.
         if not state.S or not state.B:
             return False
-        s = state.S[-1] # Cima del stack (i)
+        s = state.S[-1] 
         
-        # 1. La palabra en la cima del stack no puede ser ROOT (id=0)
-        # 2. No se ha creado aún un arco donde la cima del stack sea el nodo hijo
         has_head = any(dependent == s.id for head, rel, dependent in state.A)
         return s.id != 0 and not has_head
 
     def LA_is_correct(self, state: State) -> bool:
-        # Es correcto si en el árbol gold, la cabeza de la cima del stack es el frente del buffer
         s = state.S[-1]
         b = state.B[0]
         return s.head == b.id
     
     def RA_is_correct(self, state: State) -> bool:
-        # Es correcto si en el árbol gold, la cabeza del frente del buffer es la cima del stack
         s = state.S[-1]
         b = state.B[0]
         return b.head == s.id
 
     def RA_is_valid(self, state: State) -> bool:
-        # Precondición: El stack y el buffer no pueden estar vacíos.
         if not state.S or not state.B:
             return False
-        b = state.B[0] # Frente del buffer (j)
+        b = state.B[0] 
         
-        # No se ha creado aún un arco donde el frente del buffer sea el nodo hijo
         has_head = any(dependent == b.id for head, rel, dependent in state.A)
         return not has_head
 
     def REDUCE_is_correct(self, state: State) -> bool:
-        # REDUCE es correcto si para cada palabra en el buffer, 
-        # NINGUNA tiene como cabeza a la palabra en la cima del stack.
-        # Es decir, ya le hemos asignado todos los hijos que le correspondían.
         if not state.S or not state.B:
             return False
         s = state.S[-1]
         return not any(token.head == s.id for token in state.B)
 
     def REDUCE_is_valid(self, state: State) -> bool:
-        # Precondición: El stack no puede estar vacío.
         if not state.S:
             return False
         s = state.S[-1]
         
-        # Ya se ha creado un arco donde la cima del stack es el nodo hijo
         has_head = any(dependent == s.id for head, rel, dependent in state.A)
         return has_head
 
@@ -255,26 +240,21 @@ class ArcEager():
 
         samples = [] #Store here all training samples for sent
 
-        #Applies the transition system until a final configuration state is reached
         while not self.final_state(state):
             
-            # Guardamos una copia del estado actual para no alterar el historial
             current_state = State(list(state.S), list(state.B), set(state.A))
             
             if self.LA_is_valid(state) and self.LA_is_correct(state):
-                # En LA, la palabra en la cima del stack es la dependiente
                 transition = Transition(self.LA, state.S[-1].dep)
                 samples.append(Sample(current_state, transition))
                 self.apply_transition(state, transition)
 
             elif self.RA_is_valid(state) and self.RA_is_correct(state):
-                # En RA, la palabra en el frente del buffer es la dependiente
                 transition = Transition(self.RA, state.B[0].dep)
                 samples.append(Sample(current_state, transition))
                 self.apply_transition(state, transition)
 
             elif self.REDUCE_is_valid(state) and self.REDUCE_is_correct(state):
-                # REDUCE no genera etiquetas de dependencia
                 transition = Transition(self.REDUCE)
                 samples.append(Sample(current_state, transition))
                 self.apply_transition(state, transition)
@@ -319,18 +299,15 @@ class ArcEager():
         b = state.B[0] if state.B else None   # First in the buffer
 
         if t == self.LA and self.LA_is_valid(state):
-            # LEFT-ARC: Crea arco (b.id -> s.id). Elimina la cima del stack.
             state.A.add((b.id, dep, s.id))
             state.S.pop()
 
         elif t == self.RA and self.RA_is_valid(state): 
-            # RIGHT-ARC: Crea arco (s.id -> b.id). Mueve el frente del buffer al stack.
             state.A.add((s.id, dep, b.id))
             state.S.append(b)
             del state.B[:1]
 
         elif t == self.REDUCE and self.REDUCE_is_valid(state): 
-            # REDUCE: Elimina la palabra de la cima del stack.
             state.S.pop()
 
         else:
@@ -375,7 +352,7 @@ if __name__ == "__main__":
 
 
     print("**************************************************")
-    print("*               Arc-eager function               *")
+    print("* Arc-eager function               *")
     print("**************************************************\n")
 
     print("Creating the initial state for the sentence: 'The cat is sleeping.' \n")
@@ -409,7 +386,7 @@ if __name__ == "__main__":
 
 
     print("**************************************************")
-    print("*  Creating instances of the class Transition    *")
+    print("* Creating instances of the class Transition    *")
     print("**************************************************")
 
     # Creating a SHIFT transition
@@ -434,7 +411,7 @@ if __name__ == "__main__":
 
     print()
     print("**************************************************")
-    print("*     Creating instances of the class  Sample    *")
+    print("* Creating instances of the class  Sample    *")
     print("**************************************************")
 
     # For demonstration, let's create a dummy State instance
