@@ -5,8 +5,8 @@ from materiales.postprocessor import PostProcessor
 
 
 
-def read_file(reader, path):
-    trees = reader.read_conllu_file(path)
+def read_file(reader, path, inference = False):
+    trees = reader.read_conllu_file(path, inference=inference)
     print(f"Read a total of {len(trees)} sentences from {path}")
     print (f"Printing the first sentence of the training set... trees[0] = {trees[0]}")
     for token in trees[0]:
@@ -23,7 +23,7 @@ Read and convert CoNLLU files into tree structures
 reader = ConlluReader()
 train_trees = read_file(reader,path="materiales/en_partut-ud-train_clean.conllu")
 dev_trees = read_file(reader,path="materiales/en_partut-ud-dev_clean.conllu")
-test_trees = read_file(reader,path="materiales/en_partut-ud-test_clean.conllu")
+test_trees = read_file(reader,path="materiales/en_partut-ud-test_clean.conllu", inference=True)
 
 """
 We remove the non-projective sentences from the training and development set,
@@ -77,7 +77,7 @@ print(f"Total de muestras de desarrollo generadas: {len(dev_samples)}")
 
 # --- ENTRENAMIENTO ---
 print("\n--- INICIANDO EL MODELO NEURONAL ---")
-parser_model = ParserMLP(word_emb_dim=100, hidden_dim=64, epochs=10, batch_size=64)
+parser_model = ParserMLP(word_emb_dim=100, hidden_dim=200, epochs=20, batch_size=64)
 parser_model.train(train_samples, dev_samples)
 
 parser_model.evaluate(dev_samples)

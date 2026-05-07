@@ -195,11 +195,6 @@ class ParserMLP:
 
         arc_eager = ArcEager()
 
-        for sent in sents:
-            for token in sent[1:]:  # Empezamos en 1 para ignorar el ROOT
-                token.head = "_"
-                token.dep = "_"
-
         # 1. Initialize: Create the initial state for each sentence.
         batch_states = [arc_eager.create_initial_state(sent) for sent in sents]
         
